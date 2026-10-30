@@ -57,10 +57,10 @@ export const retireAntigravityRuntimeTempDirs = Effect.fn("retireAntigravityRunt
     const parent = path.dirname(tempDirectory);
     const prefix = `${path.basename(tempDirectory)}.old-`;
     if (yield* fs.exists(tempDirectory)) {
-      const retired = yield* fs.makeTempDirectory({ directory: parent, prefix });
-      yield* fs
-        .rename(tempDirectory, path.join(retired, "runtime"))
-        .pipe(Effect.catch(() => fs.remove(tempDirectory, { recursive: true, force: true })));
+      yield* fs.makeTempDirectory({ directory: parent, prefix }).pipe(
+        Effect.flatMap((retired) => fs.rename(tempDirectory, path.join(retired, "runtime"))),
+        Effect.catch(() => fs.remove(tempDirectory, { recursive: true, force: true })),
+      );
     }
     const entries = yield* fs.readDirectory(parent).pipe(Effect.orElseSucceed(() => []));
     return Effect.forEach(

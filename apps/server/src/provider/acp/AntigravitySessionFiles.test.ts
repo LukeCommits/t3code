@@ -3,6 +3,7 @@ import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 
 import { retireAntigravityRuntimeTempDirs } from "./AntigravitySessionFiles.ts";
 
@@ -31,5 +32,33 @@ it.layer(NodeServices.layer)("retireAntigravityRuntimeTempDirs", (it) => {
       yield* removeRetired;
       expect((yield* fs.readDirectory(parent)).toSorted()).toEqual(["other-instance"]);
     }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "deletes leftovers inline when they cannot be moved aside, such as on a full disk",
+    () =>
+      Effect.gen(function* () {
+        const removed: Array<string> = [];
+        const fs = FileSystem.makeNoop({
+          exists: () => Effect.succeed(true),
+          makeTempDirectory: () =>
+            Effect.fail(
+              PlatformError.systemError({
+                _tag: "Unknown",
+                module: "FileSystem",
+                method: "makeTempDirectory",
+                description: "ENOSPC",
+              }),
+            ),
+          remove: (path) => Effect.sync(() => void removed.push(path)),
+          readDirectory: () => Effect.succeed([]),
+        });
+
+        const removeRetired = yield* retireAntigravityRuntimeTempDirs(
+          "/state/antigravity-tmp/abc123",
+        ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+        yield* removeRetired;
+        expect(removed).toEqual(["/state/antigravity-tmp/abc123"]);
+      }),
   );
 });
